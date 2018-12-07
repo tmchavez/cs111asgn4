@@ -60,6 +60,8 @@ void initfat(struct fat * fatty, int k, int n){
   for(int i = 0; i<n; i++){
     if(i < k+1)
       fatty->phat[i] = -1;
+    else if(i == k+1)
+      fatty->phat[i] = -2;
     else
       fatty->phat[i] = 0; 
   }
@@ -220,12 +222,12 @@ int main(int argc, char *argv[])
 	int disc = open("dimage", O_CREAT | O_RDWR);
 	struct super *superblock = (struct super*)malloc(sizeof(struct super));
        	struct fat *table = (struct fat*)malloc(sizeof(struct fat));
-        struct dir *curdir = (struct dir*)malloc(sizeof(struct dir));
-	initDir(curdir,superblock->block_size,numBlocks(superblock->root_start));
-	getDir(curdir,superblock->root_start);
+        
     //dummy directy entry 	 
 	struct dirEntry *de = (struct dirEntry*)malloc(sizeof(struct dirEntry));
 	initDE(de,"dir1",4,1);
+	struct dirEntry *de2 = (struct dirEntry*)malloc(sizeof(struct dirEntry));
+	initDE(de2,"dir2",5,1);
    //init super block to 512b block size
 	initsup(superblock, 512);
 	printf(" superblock k = %d, superblock n = %d \n",superblock->k,superblock->N);
@@ -240,14 +242,22 @@ int main(int argc, char *argv[])
 	write(disc, table, superblock->block_size);
     //write a dummy entry 
         write(disc, de, 64);
+	write(disc,de2,64);
 	close(disc);
 	struct super *block2 = getSuper();
         struct fat *table2 = getFat();
+	
+	struct dir *curdir = (struct dir*)malloc(sizeof(struct dir));
+        initDir(curdir,superblock->block_size,numBlocks(superblock->root_start));
+        getDir(curdir,superblock->root_start);
 	printf(" superblock2 rootstart = %d, superblock2 n = %d \n",block2->magic, block2->N);
 	for(int i = 0; i<5; i++){
           printf(" fat value %d \n",table2->phat[i]);
-	  printf(" rootdir takes up this many blocks = %d \n",numBlocks(superblock->root_start));
         }
+	for(int i = 0; i<5; i++){
+	  struct dirEntry *de1 = &curdir->list[i];
+	  printf("direntry names / start = %s , %d \n", de1->name,de1->startBlock);
+	}
 	umask(0);
         return fuse_main(argc, argv, &phat_oper, NULL);
 }
