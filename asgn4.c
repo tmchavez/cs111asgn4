@@ -130,6 +130,22 @@ int numBlocks(int start){
   return sum;
 }
 
+int finalBlock(int start){
+  struct fat *table = getFat();
+  int sum = 1;
+  int parse = table->phat[start];
+  while(table->phat[parse] > 0){
+    sum++;
+    parse = table->phat[parse];
+  }
+  return table->phat[parse];
+}
+
+//entries per block
+int epb(){
+  struct super *t = getSuper();
+  return t->block_size/64;
+}
 
 void getDir(struct dir * curdir, int startblock){
   int numb = numBlocks(startblock);
@@ -138,7 +154,7 @@ void getDir(struct dir * curdir, int startblock){
   initDir(curdir, sb->block_size, numb);
   int pos = startblock;
   int dirpos = 0;
-  int numEntries = sb->block_size/64;
+  int numEntries = epb();
   int disc = open("dimage",O_RDONLY);
   for(int i =0; i<numb; i++){
     lseek(disc,sb->block_size*pos,SEEK_SET);
@@ -149,10 +165,50 @@ void getDir(struct dir * curdir, int startblock){
     }
     pos = table->phat[pos];
   } 
+  close(disc);
   return;
 }
 
 
+void writeDir(struct dir * curdir, int startblock){
+  int numb = numBlocks(startblock);
+  struct fat *table = getFat();
+  struct super *sb = getSuper();
+  initDir(curdir, sb->block_size, numb);
+  int pos = startblock;
+  int dirpos = 0;
+  int numEntries = epb();
+  int disc = open("dimage",O_RDONLY);
+  for(int i =0; i<numb; i++){
+    lseek(disc,sb->block_size*pos,SEEK_SET);
+    for(int j =0; j<numEntries; j++){
+      struct dirEntry *cde = &curdir->list[dirpos];
+      write(disc,cde,64);
+      dirpos++;
+    }
+    pos = table->phat[pos];
+  }
+  close(disc);
+  return;
+} 
+
+void makeNewDir(int curDirStart, char* name){
+  struct dirEntry *de = (struct dirEntry*)malloc(sizeof(struct dirEntry));
+  initDE(de,  name, getfirstopen(), 1);
+  struct dir *curdir = (struct dir*)malloc(sizeof(struct dir));
+  getDir(curdir,curDirStart);
+  int totalents = (numBlocks(curDirStart) * epb());
+  for(int i =0; i<totalents; i++){
+    struct dirEntry *de1 = &curdir->list[i];
+    if(de->name == NULL){
+      curdir->list[i] = *de1;
+      printf("made new dir at proper index \n");
+      writeDir(curdir ,curDirStart);
+      return;
+    }
+  }
+  printf("didnt register \n");
+}
 
 //////
 //update functions
@@ -246,9 +302,10 @@ int main(int argc, char *argv[])
 	close(disc);
 	struct super *block2 = getSuper();
         struct fat *table2 = getFat();
+
+
 	
 	struct dir *curdir = (struct dir*)malloc(sizeof(struct dir));
-        initDir(curdir,superblock->block_size,numBlocks(superblock->root_start));
         getDir(curdir,superblock->root_start);
 	printf(" superblock2 rootstart = %d, superblock2 n = %d \n",block2->magic, block2->N);
 	for(int i = 0; i<5; i++){
@@ -258,6 +315,13 @@ int main(int argc, char *argv[])
 	  struct dirEntry *de1 = &curdir->list[i];
 	  printf("direntry names / start = %s , %d \n", de1->name,de1->startBlock);
 	}
+	makeNewDir(block2->root_start, "test");
+	struct dir *root4test = (struct dir*)malloc(sizeof(struct dir));
+	getDir(root4test,block2->root_start);
+	for(int i = 0; i<5; i++){
+          struct dirEntry *de3 = &root4test->list[i];
+          printf("direntry names / start = %s , %d \n", de3->name,de3->startBlock);
+        }
 	umask(0);
         return fuse_main(argc, argv, &phat_oper, NULL);
 }
